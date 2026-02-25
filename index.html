@@ -180,7 +180,7 @@
             saveToFirebase(names, dates, newSelections);
           };
 
-          const updateDate = (dateId, newDateStr) => {
+          const updateDate = (dateId, newDateStr, target) => {
             if (!newDateStr) return;
             const formattedLabel = formatEstonianDate(newDateStr);
             let oldLabel = "";
@@ -196,9 +196,10 @@
               });
             }
             setDates(newDates); setSelections(newSelections); saveToFirebase(names, newDates, newSelections);
+            if (target) target.blur(); // Sulgeb kellaaja/kuupäeva akna pärast valikut
           };
 
-          const updateTime = (dateId, oldTime, newTimeStr) => {
+          const updateTime = (dateId, oldTime, newTimeStr, target) => {
             if (!newTimeStr || oldTime === newTimeStr) return;
             let dateLabel = "";
             const newDates = dates.map(d => {
@@ -213,6 +214,7 @@
               });
             }
             setDates(newDates); setSelections(newSelections); saveToFirebase(names, newDates, newSelections);
+            if (target) target.blur(); // Sulgeb kellaaja akna pärast valikut
           };
 
           // --- SEADETE ALL OLEVAD FUNKTSIOONID ---
@@ -230,6 +232,8 @@
             if (!tt) return;
             const nd = dates.map(d => (d.id === id && !d.times.includes(tt)) ? { ...d, times: [...d.times, tt].sort() } : d);
             setDates(nd); saveToFirebase(names, nd, selections); setNewTimes(p => ({ ...p, [id]: "" }));
+            // Fookuse eemaldamine, et mobiilis klaviatuur/kell sulguks
+            document.activeElement?.blur();
           };
           const removeTime = (id, t) => { const nd = dates.map(d => d.id === id ? { ...d, times: d.times.filter(x => x !== t) } : d); setDates(nd); saveToFirebase(names, nd, selections); };
 
@@ -314,7 +318,15 @@
                                 <div className="p-3 bg-white space-y-2">
                                   <div className="flex flex-wrap gap-2">{d.times.map(t => (<div key={t} className={`flex items-center gap-1 text-sm border px-2 py-1 rounded-md ${theme.subHeader}`}><span>{t}</span><button onClick={() => removeTime(d.id, t)} className="text-slate-500 hover:text-rose-500 ml-1"><Icon name="X" size={14} /></button></div>))}</div>
                                   <div className="flex gap-2 mt-2 pt-2 border-t border-slate-100">
-                                    <input type="time" value={newTimes[d.id] || ""} onChange={(e) => setNewTimes({...newTimes, [d.id]: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && addTime(d.id)} className="text-sm flex-1 px-2 py-1 border border-slate-300 rounded" />
+                                    <input 
+                                      type="time" 
+                                      value={newTimes[d.id] || ""} 
+                                      onChange={(e) => { 
+                                        setNewTimes({...newTimes, [d.id]: e.target.value});
+                                      }} 
+                                      onKeyDown={(e) => e.key === 'Enter' && addTime(d.id)} 
+                                      className="text-sm flex-1 px-2 py-1 border border-slate-300 rounded" 
+                                    />
                                     <button onClick={() => addTime(d.id)} className="bg-slate-200 text-slate-700 px-2 rounded text-sm font-medium">Lisa aeg</button>
                                   </div>
                                 </div>
@@ -347,7 +359,7 @@
                                     <span className="whitespace-nowrap">{d.label}</span>
                                     <div className="relative flex items-center justify-center w-7 h-7 bg-white/50 hover:bg-white/90 rounded-md transition-colors cursor-pointer" title="Muuda kuupäeva">
                                       <Icon name="Edit" size={14} className="text-slate-700" />
-                                      <input type="date" onChange={(e) => updateDate(d.id, e.target.value)} />
+                                      <input type="date" onChange={(e) => updateDate(d.id, e.target.value, e.target)} />
                                     </div>
                                   </div>
                                 </th>
@@ -360,11 +372,11 @@
                               if (d.times.length === 0) return null;
                               return d.times.map(t => (
                                 <th key={`${d.id}_${t}`} className={`border-b border-r border-slate-200/50 p-2 text-center font-semibold ${THEMES[i % THEMES.length].subHeader} min-w-[90px]`}>
-                                  <div className="flex flex-col items-center justify-center gap-1">
+                                  <div className="flex items-center justify-center gap-1">
                                     <span>{t}</span>
                                     <div className="relative flex items-center justify-center w-6 h-6 bg-black/5 hover:bg-black/15 rounded-md transition-colors cursor-pointer" title="Muuda kellaaega">
                                       <Icon name="Edit" size={12} className="text-slate-600" />
-                                      <input type="time" value={t} onChange={(e) => updateTime(d.id, t, e.target.value)} />
+                                      <input type="time" value={t} onChange={(e) => updateTime(d.id, t, e.target.value, e.target)} />
                                     </div>
                                   </div>
                                 </th>
