@@ -24,7 +24,6 @@
         <div id="loader">Laen rakendust...</div>
     </div>
 
-    <!-- Lisatud data-type="module", et saaksime importida Firebase andmebaasi -->
     <script type="text/babel" data-type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
@@ -40,7 +39,7 @@
             auth = getAuth(app);
             db = getFirestore(app);
         } else {
-            console.warn("Pilve võtmeid ei leitud! Rakendus töötab, aga andmed ei sünkroniseeru GitHubis teistega enne oma võtmete lisamist.");
+            console.warn("Pilve võtmeid ei leitud! Töötab lokaalses GitHubi režiimis.");
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'koosolek-app';
 
@@ -71,7 +70,6 @@
             );
         }
 
-        // Abifunktsioon kuupäeva ilusamaks vormindamiseks
         const formatEstonianDate = (dateString) => {
             if (!dateString) return "";
             const d = new Date(dateString);
@@ -86,7 +84,6 @@
           const [user, setUser] = useState(null);
           const [loadingData, setLoadingData] = useState(true);
 
-          // Algandmed uue andmebaasi loomiseks
           const defaultNames = ["Meelis Külaots", "Ehtel Kuldvere-Vent", "Lea Kurvits", "Jane Loidap", "Peeter-Toomas Tael", "Mari-Liis Vanaisak", "Merilin Seer", "Kaie Tali", "Merike Allik", "Kaja Udso"];
           const defaultDates = [
             { id: 'd1', label: '10.03 (Teisipäev)', times: ['14:00', '15:00', '16:00', '17:00', '18:00'] },
@@ -97,7 +94,6 @@
           const [dates, setDates] = useState(defaultDates);
           const [selections, setSelections] = useState({});
           
-          // SINU GOOGLE SHEETS LINK ON NÜÜD SIIN KÜLJES
           const [googleSheetUrl, setGoogleSheetUrl] = useState("https://script.google.com/macros/s/AKfycbwndnRNuDbWxvq15bxkQymReXD1yU8nu7opxwGseQZNkDsv5sCQXxrWQUrlDwN4pAguvQ/exec");
           
           const [isEditMode, setIsEditMode] = useState(false);
@@ -107,13 +103,9 @@
 
           const isInitialMount = useRef(true);
 
-          // 1. Samm: Autentimine (Sisselogimine taustal)
+          // 1. Samm: Autentimine (Töötab Canvasel)
           useEffect(() => {
-            if (!auth) {
-                setLoadingData(false); // Kui Firebase'i pole, lae kohe leht ette
-                return;
-            }
-
+            if (!auth) return;
             const initAuth = async () => {
               try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -121,60 +113,81 @@
                 } else {
                   await signInAnonymously(auth);
                 }
-              } catch (error) {
-                console.error("Autentimise viga:", error);
-                setLoadingData(false);
-              }
+              } catch (error) {}
             };
-
             initAuth();
             const unsubscribe = onAuthStateChanged(auth, (u) => {
               setUser(u);
-              if(!u) setLoadingData(false);
             });
-
             return () => unsubscribe();
           }, []);
 
-          // 2. Samm: Andmete sünkroniseerimine (Kuulab pidevalt pilvest muudatusi)
+          // 2. Samm: Andmete laadimine
           useEffect(() => {
-            if (!user || !db) return;
+            if (typeof __firebase_config !== 'undefined') {
+                // CANVAS REŽIIM (Kasutab Firebase'i)
+                if (!user || !db) return;
+                const pollDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll');
+                const unsubscribe = onSnapshot(pollDocRef, (docSnap) => {
+                  if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.names && data.names.length > 0) setNames(data.names);
+                    if (data.dates && data.dates.length > 0) setDates(data.dates);
+                    if (data.selections) setSelections(data.selections);
+                    if (data.googleSheetUrl !== undefined) setGoogleSheetUrl(data.googleSheetUrl);
+                  }
+                  setLoadingData(false);
+                }, () => setLoadingData(false));
+                return () => unsubscribe();
+            } else {
+                // GITHUB REŽIIM
+                const loadData = async () => {
+                    // Esmalt laeme brauseri lokaalsest mälust
+                    const savedData = localStorage.getItem('koosolek_data');
+                    if (savedData) {
+                        try {
+                            const parsed = JSON.parse(savedData);
+                            if (parsed.names && parsed.names.length > 0) setNames(parsed.names);
+                            if (parsed.dates && parsed.dates.length > 0) setDates(parsed.dates);
+                            if (parsed.selections) setSelections(parsed.selections);
+                        } catch (e) {}
+                    }
 
-            const pollDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll');
-            
-            const unsubscribe = onSnapshot(pollDocRef, (docSnap) => {
-              if (docSnap.exists()) {
-                const data = docSnap.data();
-                if (data.names) setNames(data.names);
-                if (data.dates) setDates(data.dates);
-                if (data.selections) setSelections(data.selections);
-                if (data.googleSheetUrl !== undefined) setGoogleSheetUrl(data.googleSheetUrl);
-              } else {
-                // Kui andmebaas on tühi, loome sinna algandmed
-                setDoc(pollDocRef, { names: defaultNames, dates: defaultDates, selections: {}, googleSheetUrl: "https://script.google.com/macros/s/AKfycbwndnRNuDbWxvq15bxkQymReXD1yU8nu7opxwGseQZNkDsv5sCQXxrWQUrlDwN4pAguvQ/exec" });
-              }
-              setLoadingData(false);
-            }, (err) => {
-              console.error("Sünkroniseerimise viga:", err);
-              setLoadingData(false);
-            });
+                    // Seejärel proovime andmeid lugeda Google Sheetsist (et näha teiste uusi valikuid)
+                    if (googleSheetUrl) {
+                        try {
+                            const res = await fetch(googleSheetUrl);
+                            const data = await res.json();
+                            if (data && data.names && data.names.length > 0) {
+                                setNames(data.names);
+                                setDates(data.dates);
+                                setSelections(data.selections);
+                                localStorage.setItem('koosolek_data', JSON.stringify(data));
+                            }
+                        } catch (err) {
+                            console.warn("Ei saanud Sheetsist andmeid alla laadida.", err);
+                        }
+                    }
+                    setLoadingData(false);
+                };
+                loadData();
+            }
+          }, [user]); // googleSheetUrl muutus siin teadlikult eemaldatud, et mitte lõputult lehte laadida
 
-            return () => unsubscribe();
-          }, [user]);
-
-          // Funktsioon uute andmete saatmiseks pilve
           const saveToFirebase = async (newNames, newDates, newSelections, newUrl = googleSheetUrl) => {
-            if (!user || !db) return;
-            try {
-              const pollDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll');
-              await setDoc(pollDocRef, {
-                names: newNames,
-                dates: newDates,
-                selections: newSelections,
-                googleSheetUrl: newUrl
-              });
-            } catch (err) {
-              console.error("Salvestamine ebaõnnestus:", err);
+            // UUS: Salvestame alati kohalikku mällu, et leht mäletaks seisu koheselt
+            localStorage.setItem('koosolek_data', JSON.stringify({
+                names: newNames, dates: newDates, selections: newSelections
+            }));
+
+            // Kui oleme Canvasel, salvestame ka Firebase'i
+            if (typeof __firebase_config !== 'undefined' && user && db) {
+                try {
+                    const pollDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll');
+                    await setDoc(pollDocRef, {
+                        names: newNames, dates: newDates, selections: newSelections, googleSheetUrl: newUrl
+                    });
+                } catch (err) {}
             }
           };
 
@@ -182,8 +195,6 @@
             setGoogleSheetUrl(url);
             saveToFirebase(names, dates, selections, url);
           };
-
-          // --- MUUTMISE FUNKTSIOONID (Kõik saadavad nüüd andmeid pilve) ---
 
           const toggleSelection = (name, dateLabel, time) => {
             if (isEditMode) return;
@@ -211,7 +222,6 @@
           
           const addDate = () => { 
             if (newDate) { 
-                // Vormindame kalendrist tulnud kuupäeva ilusamaks
                 const formattedLabel = formatEstonianDate(newDate);
                 const newDates = [...dates, { id: `d${Date.now()}`, label: formattedLabel, times: [] }];
                 setDates(newDates); 
@@ -231,7 +241,6 @@
             if (timeToAdd) {
               const newDates = dates.map(d => {
                 if (d.id === dateId && !d.times.includes(timeToAdd)) { 
-                  // Lisame aja ja sorteerime massiivi, et ajad oleksid alati õiges järjekorras!
                   return { ...d, times: [...d.times, timeToAdd].sort() }; 
                 }
                 return d;
@@ -263,7 +272,6 @@
               return d;
             });
 
-            // Tõstame varasemad linnukesed uue kuupäeva alla
             const newSelections = { ...selections };
             if (oldLabel && oldLabel !== formattedLabel) {
               Object.keys(newSelections).forEach(key => {
@@ -294,7 +302,6 @@
               return d;
             });
 
-            // Tõstame varasemad linnukesed uue kellaaja alla
             const newSelections = { ...selections };
             if (dateLabel) {
               Object.keys(newSelections).forEach(key => {
@@ -311,7 +318,6 @@
             saveToFirebase(names, newDates, newSelections);
           };
 
-          // --- ARVUTUSED ---
           const totals = useMemo(() => {
             const calcTotals = {};
             dates.forEach(d => {
@@ -332,18 +338,14 @@
           const [isSyncing, setIsSyncing] = useState(false);
           
           useEffect(() => {
-            // Väldime sünkroniseerimist lehe esimesel laadimisel
             if (isInitialMount.current) {
               isInitialMount.current = false;
               return;
             }
-            // Kui URLi pole või andmeid alles laetakse, ei tee midagi
             if (!googleSheetUrl || loadingData) return;
 
             setIsSyncing(true);
             
-            // Ootame 1.5 sekundit peale viimast muudatust (debouncing), 
-            // et mitte iga kiire kliki peale uut päringut saata.
             const timeoutId = setTimeout(() => {
               fetch(googleSheetUrl, {
                 method: 'POST',
@@ -358,17 +360,14 @@
               });
             }, 1500); 
 
-            // Puhastame eelmise ooteaja, kui kasutaja teeb uue kliki enne 1.5 sekundi möödumist
             return () => clearTimeout(timeoutId);
-          }, [selections, names, dates, googleSheetUrl]); // Käivitub alati, kui need andmed muutuvad
+          }, [selections, names, dates, googleSheetUrl]);
 
-          // Alglaadimise pilt
           if (loadingData) {
             return (
               <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4">
                 <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <h2 className="text-xl font-semibold text-slate-700">Ühendan andmebaasiga...</h2>
-                <p className="text-slate-500 mt-2 text-center max-w-md">Laen andmeid turvalisest pilveserverist, et näeksid teiste valikuid reaalajas.</p>
+                <h2 className="text-xl font-semibold text-slate-700">Laen andmeid...</h2>
               </div>
             );
           }
@@ -377,7 +376,6 @@
             <div className="min-h-screen bg-slate-100 py-8 px-4 sm:px-6 lg:px-8 font-sans">
               <div className="max-w-6xl mx-auto space-y-6">
                 
-                {/* Päis ja Juhtpaneel */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
                   <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                     <div>
@@ -424,12 +422,10 @@
                   )}
                 </div>
 
-                {/* --- MUUTMISE PANEEL --- */}
                 {isEditMode && (
                   <div className="bg-white rounded-2xl shadow-sm border-2 border-slate-800 p-6 sm:p-8">
                     <h2 className="text-xl font-bold text-slate-800 mb-6 border-b pb-2">Seaded / Andmete muutmine</h2>
                     
-                    {/* Google Sheets seaded */}
                     <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
                       <h3 className="font-semibold text-blue-800 flex items-center gap-2">Google Sheets integratsioon</h3>
                       <p className="text-sm text-blue-700">See on sinu Google Sheetsi faili link. Kui soovid siia seotud tabelit muuta, saad lingi allpool asendada.</p>
@@ -443,7 +439,6 @@
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {/* Osalejad */}
                       <div className="space-y-4">
                         <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Icon name="Users" size={18} /> Osalejad</h3>
                         <div className="flex gap-2">
@@ -461,7 +456,6 @@
                         </div>
                       </div>
 
-                      {/* Kuupäevad */}
                       <div className="space-y-4">
                         <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Icon name="CalendarDays" size={18} /> Kuupäevad ja ajad</h3>
                         <div className="flex gap-2">
@@ -522,7 +516,6 @@
                   </div>
                 )}
 
-                {/* --- PEAMINE TABEL --- */}
                 <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-opacity ${isEditMode ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div className="overflow-x-auto">
                     {dates.length === 0 || dates.every(d => d.times.length === 0) ? (
@@ -601,9 +594,7 @@
           );
         }
 
-        // Käivitame Reacti rakenduse
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
 </body>
 </html>
