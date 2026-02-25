@@ -14,9 +14,24 @@
     <style>
         /* Lihtne laadimisekraan alglaadimiseks */
         #loader { display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #475569; }
-        /* Peidame kellaikooni osades brauserites, et disain oleks puhtam */
-        input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0; width: 100%; height: 100%; position: absolute; }
-        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0; width: 100%; height: 100%; position: absolute; }
+        
+        /* Kalendri ja kella sisendite stiilid, et need oleksid mugavamad */
+        input[type="date"], input[type="time"] { cursor: pointer; border: none; background: transparent; padding: 0; margin: 0; width: 100%; height: 100%; }
+        
+        /* Peidame vaikimisi noolekesed ja ikoonid, et hoida disain puhas, 
+           aga lubame klikkimisel kalendri avanemise */
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            cursor: pointer;
+            opacity: 0;
+        }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -38,12 +53,9 @@
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-        } else {
-            console.warn("Pilve võtmeid ei leitud! Töötab lokaalses GitHubi režiimis.");
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'koosolek-app';
 
-        // Värviteemad erinevatele päevadele
         const THEMES = [
           { header: "bg-blue-100 text-blue-800 border-blue-200", subHeader: "bg-blue-50 text-blue-700 border-blue-200", cellSelected: "bg-blue-500 text-white", cellHover: "hover:bg-blue-100", bestTime: "bg-blue-600 text-white border-t-blue-700" },
           { header: "bg-amber-100 text-amber-900 border-amber-200", subHeader: "bg-amber-50 text-amber-800 border-amber-200", cellSelected: "bg-amber-500 text-white", cellHover: "hover:bg-amber-100", bestTime: "bg-amber-600 text-white border-t-amber-700" },
@@ -51,7 +63,6 @@
           { header: "bg-emerald-100 text-emerald-800 border-emerald-200", subHeader: "bg-emerald-50 text-emerald-700 border-emerald-200", cellSelected: "bg-emerald-500 text-white", cellHover: "hover:bg-emerald-100", bestTime: "bg-emerald-600 text-white border-t-emerald-700" }
         ];
 
-        // Ikoonide abikomponent
         const Icon = ({ name, size = 24, className = "", strokeWidth = 2 }) => {
             const icons = {
                 Check: <polyline points="20 6 9 17 4 12" />,
@@ -71,7 +82,6 @@
             );
         }
 
-        // Töökindlam kuupäeva formaatimine
         const formatEstonianDate = (dateString) => {
             if (!dateString) return "";
             const [y, m, d] = dateString.split('-');
@@ -85,37 +95,24 @@
           const [user, setUser] = useState(null);
           const [loadingData, setLoadingData] = useState(true);
 
-          const defaultNames = ["Meelis Külaots", "Ehtel Kuldvere-Vent", "Lea Kurvits", "Jane Loidap", "Peeter-Toomas Tael", "Mari-Liis Vanaisak", "Merilin Seer", "Kaie Tali", "Merike Allik", "Kaja Udso"];
-          const defaultDates = [
-            { id: 'd1', label: '10.03 (Teisipäev)', times: ['14:00', '15:00', '16:00', '17:00', '18:00'] },
-            { id: 'd2', label: '12.03 (Neljapäev)', times: ['14:00', '15:00', '16:00', '17:00', '18:00'] }
-          ];
-
-          const [names, setNames] = useState(defaultNames);
-          const [dates, setDates] = useState(defaultDates);
+          const [names, setNames] = useState([]);
+          const [dates, setDates] = useState([]);
           const [selections, setSelections] = useState({});
-          
           const [googleSheetUrl, setGoogleSheetUrl] = useState("https://script.google.com/macros/s/AKfycbwndnRNuDbWxvq15bxkQymReXD1yU8nu7opxwGseQZNkDsv5sCQXxrWQUrlDwN4pAguvQ/exec");
           
           const [isEditMode, setIsEditMode] = useState(false);
           const [newName, setNewName] = useState("");
-          const [newDate, setNewDate] = useState("");
           const [newTimes, setNewTimes] = useState({});
 
           const isInitialMount = useRef(true);
 
           useEffect(() => {
-            if (!auth) {
-                setLoadingData(false);
-                return;
-            }
+            if (!auth) { setLoadingData(false); return; }
             const initAuth = async () => {
               try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                   await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                  await signInAnonymously(auth);
-                }
+                } else { await signInAnonymously(auth); }
               } catch (error) {}
             };
             initAuth();
@@ -127,36 +124,35 @@
             if (typeof __firebase_config !== 'undefined') {
                 if (!user || !db) return;
                 const pollDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll');
-                const unsubscribe = onSnapshot(pollDocRef, (docSnap) => {
+                return onSnapshot(pollDocRef, (docSnap) => {
                   if (docSnap.exists()) {
                     const data = docSnap.data();
-                    if (data.names && data.names.length > 0) setNames(data.names);
-                    if (data.dates && data.dates.length > 0) setDates(data.dates);
+                    if (data.names) setNames(data.names);
+                    if (data.dates) setDates(data.dates);
                     if (data.selections) setSelections(data.selections);
                     if (data.googleSheetUrl !== undefined) setGoogleSheetUrl(data.googleSheetUrl);
+                  } else {
+                    const dn = ["Meelis Külaots", "Ehtel Kuldvere-Vent", "Lea Kurvits", "Jane Loidap", "Peeter-Toomas Tael", "Mari-Liis Vanaisak", "Merilin Seer", "Kaie Tali", "Merike Allik", "Kaja Udso"];
+                    const dd = [{ id: 'd1', label: '10.03 (Teisipäev)', times: ['14:00', '15:00', '16:00', '17:00', '18:00'] }, { id: 'd2', label: '12.03 (Neljapäev)', times: ['14:00', '15:00', '16:00', '17:00', '18:00'] }];
+                    setDoc(pollDocRef, { names: dn, dates: dd, selections: {}, googleSheetUrl: "" });
                   }
                   setLoadingData(false);
                 }, () => setLoadingData(false));
-                return () => unsubscribe();
             } else {
                 const loadData = async () => {
                     const savedData = localStorage.getItem('koosolek_data');
                     if (savedData) {
-                        try {
-                            const parsed = JSON.parse(savedData);
-                            if (parsed.names && parsed.names.length > 0) setNames(parsed.names);
-                            if (parsed.dates && parsed.dates.length > 0) setDates(parsed.dates);
-                            if (parsed.selections) setSelections(parsed.selections);
-                        } catch (e) {}
+                        const parsed = JSON.parse(savedData);
+                        if (parsed.names) setNames(parsed.names);
+                        if (parsed.dates) setDates(parsed.dates);
+                        if (parsed.selections) setSelections(parsed.selections);
                     }
                     if (googleSheetUrl) {
                         try {
                             const res = await fetch(googleSheetUrl);
                             const data = await res.json();
-                            if (data && data.names && data.names.length > 0) {
-                                setNames(data.names);
-                                setDates(data.dates);
-                                setSelections(data.selections);
+                            if (data && data.names) {
+                                setNames(data.names); setDates(data.dates); setSelections(data.selections);
                                 localStorage.setItem('koosolek_data', JSON.stringify(data));
                             }
                         } catch (err) {}
@@ -170,17 +166,11 @@
           const saveToFirebase = async (newNames, newDates, newSelections, newUrl = googleSheetUrl) => {
             localStorage.setItem('koosolek_data', JSON.stringify({ names: newNames, dates: newDates, selections: newSelections }));
             if (typeof __firebase_config !== 'undefined' && user && db) {
-                try {
-                    const pollDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll');
-                    await setDoc(pollDocRef, { names: newNames, dates: newDates, selections: newSelections, googleSheetUrl: newUrl });
-                } catch (err) {}
+                try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'poll_data', 'main_poll'), { names: newNames, dates: newDates, selections: newSelections, googleSheetUrl: newUrl }); } catch (err) {}
             }
           };
 
-          const saveUrl = (url) => {
-            setGoogleSheetUrl(url);
-            saveToFirebase(names, dates, selections, url);
-          };
+          const saveUrl = (url) => { setGoogleSheetUrl(url); saveToFirebase(names, dates, selections, url); };
 
           const toggleSelection = (name, dateLabel, time) => {
             if (isEditMode) return;
@@ -190,190 +180,106 @@
             saveToFirebase(names, dates, newSelections);
           };
 
-          // --- MUUTMISE FUNKTSIOONID (K.A. ESILEHEL) ---
           const updateDate = (dateId, newDateStr) => {
             if (!newDateStr) return;
             const formattedLabel = formatEstonianDate(newDateStr);
             let oldLabel = "";
             const newDates = dates.map(d => {
-              if (d.id === dateId) {
-                oldLabel = d.label;
-                return { ...d, label: formattedLabel };
-              }
+              if (d.id === dateId) { oldLabel = d.label; return { ...d, label: formattedLabel }; }
               return d;
             });
-
             const newSelections = { ...selections };
             if (oldLabel && oldLabel !== formattedLabel) {
               Object.keys(newSelections).forEach(key => {
                 const [name, dLabel, time] = key.split("@@");
-                if (dLabel === oldLabel) {
-                  const val = newSelections[key];
-                  delete newSelections[key];
-                  newSelections[`${name}@@${formattedLabel}@@${time}`] = val;
-                }
+                if (dLabel === oldLabel) { const val = newSelections[key]; delete newSelections[key]; newSelections[`${name}@@${formattedLabel}@@${time}`] = val; }
               });
             }
-            setDates(newDates);
-            setSelections(newSelections);
-            saveToFirebase(names, newDates, newSelections);
+            setDates(newDates); setSelections(newSelections); saveToFirebase(names, newDates, newSelections);
           };
 
           const updateTime = (dateId, oldTime, newTimeStr) => {
             if (!newTimeStr || oldTime === newTimeStr) return;
             let dateLabel = "";
             const newDates = dates.map(d => {
-              if (d.id === dateId) {
-                dateLabel = d.label;
-                let updatedTimes = d.times.filter(t => t !== oldTime);
-                if (!updatedTimes.includes(newTimeStr)) updatedTimes.push(newTimeStr);
-                updatedTimes.sort();
-                return { ...d, times: updatedTimes };
-              }
+              if (d.id === dateId) { dateLabel = d.label; let ut = d.times.filter(t => t !== oldTime); if (!ut.includes(newTimeStr)) ut.push(newTimeStr); ut.sort(); return { ...d, times: ut }; }
               return d;
             });
-
             const newSelections = { ...selections };
             if (dateLabel) {
               Object.keys(newSelections).forEach(key => {
                 const [name, dLabel, time] = key.split("@@");
-                if (dLabel === dateLabel && time === oldTime) {
-                  const val = newSelections[key];
-                  delete newSelections[key];
-                  newSelections[`${name}@@${dateLabel}@@${newTimeStr}`] = val;
-                }
+                if (dLabel === dateLabel && time === oldTime) { const val = newSelections[key]; delete newSelections[key]; newSelections[`${name}@@${dateLabel}@@${newTimeStr}`] = val; }
               });
             }
-            setDates(newDates);
-            setSelections(newSelections);
-            saveToFirebase(names, newDates, newSelections);
+            setDates(newDates); setSelections(newSelections); saveToFirebase(names, newDates, newSelections);
           };
 
           // --- KIIRE LISAMINE ESILEHEL ---
-          const handleQuickAddDate = () => {
-            // Võtame tänase kuupäeva asenduskuupäevaks
-            const today = new Date();
-            const y = today.getFullYear();
-            const m = String(today.getMonth() + 1).padStart(2, '0');
-            const d = String(today.getDate()).padStart(2, '0');
-            const dateStr = `${y}-${m}-${d}`;
-            const formattedLabel = formatEstonianDate(dateStr);
+          const handleQuickAddDate = (e) => {
+            const dateVal = e.target.value;
+            if (!dateVal) return;
             
-            // Tagame, et nimed ei kattu, kui vajutatakse mitu korda
-            let finalLabel = formattedLabel;
-            let counter = 1;
-            while(dates.some(d => d.label === finalLabel)) {
-               finalLabel = `${formattedLabel} (${counter})`;
-               counter++;
+            const formattedLabel = formatEstonianDate(dateVal);
+            if (dates.some(d => d.label === formattedLabel)) {
+                alert("See kuupäev on juba tabelis!");
+                e.target.value = '';
+                return;
             }
 
-            // Kopeerime eelmised ajad
             let timesToCopy = [];
             const lastValidDate = [...dates].reverse().find(d => d.times && d.times.length > 0);
-            if (lastValidDate) {
-                timesToCopy = [...lastValidDate.times];
-            } else {
-                timesToCopy = ['14:00', '15:00', '16:00', '17:00']; // Vaikimisi ajad, kui on täitsa tühi
-            }
+            if (lastValidDate) { timesToCopy = [...lastValidDate.times]; } 
+            else { timesToCopy = ['14:00', '15:00', '16:00', '17:00']; }
 
-            const newDates = [...dates, { id: `d${Date.now()}`, label: finalLabel, times: timesToCopy }];
+            const newDates = [...dates, { id: `d${Date.now()}`, label: formattedLabel, times: timesToCopy }];
             setDates(newDates);
             saveToFirebase(names, newDates, selections);
+            e.target.value = ''; // Puhastame, et saaks uuesti valida
           };
 
           // --- SEADETE ALL OLEVAD FUNKTSIOONID ---
           const addName = () => { 
             const trimmed = newName.trim();
-            if (!trimmed) return;
-            if (!names.includes(trimmed)) { 
+            if (trimmed && !names.includes(trimmed)) { 
                 const newNames = [...names, trimmed];
-                setNames(newNames); 
-                saveToFirebase(newNames, dates, selections);
-                setNewName(""); 
+                setNames(newNames); saveToFirebase(newNames, dates, selections); setNewName(""); 
             }
           };
-          
-          const removeName = (nameToRemove) => { 
-              const newNames = names.filter(n => n !== nameToRemove);
-              setNames(newNames); 
-              saveToFirebase(newNames, dates, selections);
+          const removeName = (n) => { const nn = names.filter(x => x !== n); setNames(nn); saveToFirebase(nn, dates, selections); };
+          const removeDate = (id) => { const nd = dates.filter(d => d.id !== id); setDates(nd); saveToFirebase(names, nd, selections); };
+          const addTime = (id) => {
+            const tt = newTimes[id];
+            if (!tt) return;
+            const nd = dates.map(d => (d.id === id && !d.times.includes(tt)) ? { ...d, times: [...d.times, tt].sort() } : d);
+            setDates(nd); saveToFirebase(names, nd, selections); setNewTimes(p => ({ ...p, [id]: "" }));
           };
-          
-          const removeDate = (idToRemove) => { 
-              const newDates = dates.filter(d => d.id !== idToRemove);
-              setDates(newDates); 
-              saveToFirebase(names, newDates, selections);
-          };
-          
-          const addTime = (dateId) => {
-            const timeToAdd = newTimes[dateId];
-            if (!timeToAdd) return;
-            const newDates = dates.map(d => {
-              if (d.id === dateId && !d.times.includes(timeToAdd)) { 
-                return { ...d, times: [...d.times, timeToAdd].sort() }; 
-              }
-              return d;
-            });
-            setDates(newDates);
-            saveToFirebase(names, newDates, selections);
-            setNewTimes(prev => ({ ...prev, [dateId]: "" }));
-          };
-          
-          const removeTime = (dateId, timeToRemove) => {
-            const newDates = dates.map(d => {
-              if (d.id === dateId) { return { ...d, times: d.times.filter(t => t !== timeToRemove) }; }
-              return d;
-            });
-            setDates(newDates);
-            saveToFirebase(names, newDates, selections);
-          };
+          const removeTime = (id, t) => { const nd = dates.map(d => d.id === id ? { ...d, times: d.times.filter(x => x !== t) } : d); setDates(nd); saveToFirebase(names, nd, selections); };
 
           const totals = useMemo(() => {
-            const calcTotals = {};
-            dates.forEach(d => {
-              d.times.forEach(t => {
+            const c = {};
+            dates.forEach(d => d.times.forEach(t => {
                 const key = `${d.label}@@${t}`;
-                calcTotals[key] = names.reduce((sum, name) => {
-                  const selKey = `${name}@@${d.label}@@${t}`;
-                  return sum + (selections[selKey] ? 1 : 0);
-                }, 0);
-              });
-            });
-            return calcTotals;
+                c[key] = names.reduce((sum, name) => sum + (selections[`${name}@@${d.label}@@${t}`] ? 1 : 0), 0);
+            }));
+            return c;
           }, [selections, dates, names]);
 
           const maxTotal = Math.max(...Object.values(totals), 0);
-
-          // SÜNKRONISEERIMINE
           const [isSyncing, setIsSyncing] = useState(false);
           
           useEffect(() => {
-            if (isInitialMount.current) {
-              isInitialMount.current = false;
-              return;
-            }
+            if (isInitialMount.current) { isInitialMount.current = false; return; }
             if (!googleSheetUrl || loadingData) return;
-
             setIsSyncing(true);
-            const timeoutId = setTimeout(() => {
-              fetch(googleSheetUrl, {
-                method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ names, dates, selections, totals })
-              }).then(() => setTimeout(() => setIsSyncing(false), 1000))
-                .catch(() => setIsSyncing(false));
+            const tid = setTimeout(() => {
+              fetch(googleSheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names, dates, selections, totals }) })
+                .then(() => setTimeout(() => setIsSyncing(false), 1000)).catch(() => setIsSyncing(false));
             }, 1500); 
+            return () => clearTimeout(tid);
+          }, [selections, names, dates]);
 
-            return () => clearTimeout(timeoutId);
-          }, [selections, names, dates, googleSheetUrl]);
-
-          if (loadingData) {
-            return (
-              <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4">
-                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <h2 className="text-xl font-semibold text-slate-700">Laen andmeid...</h2>
-              </div>
-            );
-          }
+          if (loadingData) return <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4"><div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div><h2 className="text-xl font-semibold text-slate-700">Laen andmeid...</h2></div>;
 
           return (
             <div className="min-h-screen bg-slate-100 py-8 px-4 sm:px-6 lg:px-8 font-sans">
@@ -382,70 +288,31 @@
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
                   <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                     <div>
-                      <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3">
-                        <Icon name="CalendarDays" className="text-emerald-600" size={32} />
-                        Koosoleku aja valimine
-                      </h1>
+                      <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3"><Icon name="CalendarDays" className="text-emerald-600" size={32} />Koosoleku aja valimine</h1>
                       <p className="mt-2 text-slate-600">Elva Valla Rahvakultuuri Koostöögrupp</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                      <div className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-medium">
-                        <Icon name="Users" size={20} />
-                        <span>{names.length} liiget</span>
-                      </div>
-                      
+                      <div className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-medium"><Icon name="Users" size={20} /><span>{names.length} liiget</span></div>
                       {googleSheetUrl && (
                         <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isSyncing ? 'bg-blue-100 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                          {isSyncing ? (
-                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <Icon name="Check" size={18} />
-                          )}
+                          {isSyncing ? <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div> : <Icon name="Check" size={18} />}
                           {isSyncing ? 'Salvestan tabelisse...' : 'Tabel sünkroniseeritud'}
                         </div>
                       )}
-
-                      <button onClick={() => setIsEditMode(!isEditMode)} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${isEditMode ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' : 'bg-slate-800 text-white hover:bg-slate-700'}`}>
-                        <Icon name={isEditMode ? 'X' : 'Settings'} size={20} />
-                        {isEditMode ? 'Sulge muutmine' : 'Muuda andmeid'}
-                      </button>
+                      <button onClick={() => setIsEditMode(!isEditMode)} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${isEditMode ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' : 'bg-slate-800 text-white hover:bg-slate-700'}`}><Icon name={isEditMode ? 'X' : 'Settings'} size={20} />{isEditMode ? 'Sulge muutmine' : 'Muuda andmeid'}</button>
                     </div>
                   </div>
-                  
-                  {!isEditMode && (
-                    <div className="mt-6 text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start gap-3">
-                      <div className="bg-emerald-100 p-2 rounded-full text-emerald-600 flex-shrink-0 mt-0.5">
-                         <Icon name="Check" size={16} strokeWidth={3} />
-                      </div>
-                      <p>
-                        <strong>Kuidas kasutada:</strong> Klõpsa tabeli lahtritel enda nime real, et märkida kellaajad, mis sulle sobivad. 
-                        Tabeli päises saad <strong>kuupäevi ja kellaaegu muuta</strong>, kui vajutad nende kõrval olevale pliiatsile.
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 {isEditMode && (
                   <div className="bg-white rounded-2xl shadow-sm border-2 border-slate-800 p-6 sm:p-8">
                     <h2 className="text-xl font-bold text-slate-800 mb-6 border-b pb-2">Seaded / Andmete muutmine</h2>
-                    
-                    <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
-                      <h3 className="font-semibold text-blue-800 flex items-center gap-2">Google Sheets integratsioon</h3>
-                      <input 
-                        type="text" 
-                        value={googleSheetUrl} 
-                        onChange={(e) => saveUrl(e.target.value)} 
-                        placeholder="https://script.google.com/macros/s/.../exec" 
-                        className="w-full px-3 py-2 bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm font-mono text-slate-500" 
-                      />
-                    </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       <div className="space-y-4">
                         <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Icon name="Users" size={18} /> Osalejad</h3>
                         <div className="flex gap-2">
                           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addName()} placeholder="Uue osaleja nimi..." className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400" />
-                          <button onClick={addName} className="bg-slate-800 text-white p-2 rounded-lg hover:bg-slate-700" title="Lisa osaleja"><Icon name="Plus" size={20} /></button>
+                          <button onClick={addName} className="bg-slate-800 text-white p-2 rounded-lg hover:bg-slate-700"><Icon name="Plus" size={20} /></button>
                         </div>
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 max-h-64 overflow-y-auto space-y-1">
                           {names.map(name => (
@@ -456,10 +323,8 @@
                           ))}
                         </div>
                       </div>
-
                       <div className="space-y-4">
-                        <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Icon name="CalendarDays" size={18} /> Kellaaegade haldus</h3>
-                        <p className="text-sm text-slate-500">Märkus: Kuupäevi ja kellaaegu saab nüüd muuta otse esilehel, klõpsates päises pliiatsi ikoonile!</p>
+                        <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Icon name="CalendarDays" size={18} /> Kustutamine ja Lisad</h3>
                         <div className="space-y-3">
                           {dates.map((d, index) => {
                             const theme = THEMES[index % THEMES.length];
@@ -470,22 +335,9 @@
                                   <button onClick={() => removeDate(d.id)} className="text-slate-700 hover:text-rose-600 hover:bg-white/50 p-1 rounded"><Icon name="Trash2" size={18} /></button>
                                 </div>
                                 <div className="p-3 bg-white space-y-2">
-                                  <div className="flex flex-wrap gap-2">
-                                    {d.times.map(t => (
-                                      <div key={t} className={`flex items-center gap-1 text-sm border px-2 py-1 rounded-md ${theme.subHeader}`}>
-                                        <span>{t}</span>
-                                        <button onClick={() => removeTime(d.id, t)} className="text-slate-500 hover:text-rose-500 ml-1"><Icon name="X" size={14} /></button>
-                                      </div>
-                                    ))}
-                                  </div>
+                                  <div className="flex flex-wrap gap-2">{d.times.map(t => (<div key={t} className={`flex items-center gap-1 text-sm border px-2 py-1 rounded-md ${theme.subHeader}`}><span>{t}</span><button onClick={() => removeTime(d.id, t)} className="text-slate-500 hover:text-rose-500 ml-1"><Icon name="X" size={14} /></button></div>))}</div>
                                   <div className="flex gap-2 mt-2 pt-2 border-t border-slate-100">
-                                    <input 
-                                      type="time" 
-                                      value={newTimes[d.id] || ""} 
-                                      onChange={(e) => setNewTimes({...newTimes, [d.id]: e.target.value})} 
-                                      onKeyDown={(e) => e.key === 'Enter' && addTime(d.id)} 
-                                      className="text-sm flex-1 px-2 py-1 border border-slate-300 rounded" 
-                                    />
+                                    <input type="time" value={newTimes[d.id] || ""} onChange={(e) => setNewTimes({...newTimes, [d.id]: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && addTime(d.id)} className="text-sm flex-1 px-2 py-1 border border-slate-300 rounded" />
                                     <button onClick={() => addTime(d.id)} className="bg-slate-200 text-slate-700 px-2 rounded text-sm font-medium">Lisa aeg</button>
                                   </div>
                                 </div>
@@ -500,61 +352,55 @@
 
                 <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-opacity ${isEditMode ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div className="overflow-x-auto">
-                    {dates.length === 0 || dates.every(d => d.times.length === 0) ? (
+                    {dates.length === 0 ? (
                       <div className="p-12 text-center text-slate-500">
                         <Icon name="CalendarDays" size={48} className="mx-auto mb-4 opacity-20" />
-                        <p>Tabel on tühi. Vajuta nupule "Lisa päev", et alustada.</p>
-                        <button onClick={handleQuickAddDate} className="mt-4 px-4 py-2 bg-emerald-100 text-emerald-800 rounded-lg font-medium">
-                          Lisa esimene päev
-                        </button>
+                        <p>Tabel on tühi. Vali kalendrist esimene päev, et alustada.</p>
                       </div>
                     ) : (
                       <table className="min-w-full border-collapse text-sm">
                         <thead>
                           <tr>
                             <th className="sticky left-0 z-20 bg-white border-b border-r border-slate-200 p-4 min-w-[180px] shadow-[1px_0_0_0_#e2e8f0]"></th>
-                            
-                            {/* KUUPÄEVADE PÄIS (Nähtav muutmisnupp) */}
                             {dates.map((d, i) => {
                               if (d.times.length === 0) return null;
                               return (
                                 <th key={d.id} colSpan={d.times.length} className={`border-b border-r p-3 text-center font-bold text-base ${THEMES[i % THEMES.length].header}`}>
                                   <div className="flex items-center justify-center gap-2">
-                                    <span>{d.label}</span>
-                                    <div className="relative flex items-center justify-center w-6 h-6 bg-white/40 hover:bg-white/80 rounded transition-colors cursor-pointer" title="Muuda kuupäeva">
+                                    <span className="whitespace-nowrap">{d.label}</span>
+                                    <div className="relative flex items-center justify-center w-7 h-7 bg-white/50 hover:bg-white/90 rounded-md transition-colors cursor-pointer" title="Muuda kuupäeva">
                                       <Icon name="Edit" size={14} className="text-slate-700" />
-                                      <input type="date" onChange={(e) => updateDate(d.id, e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                      <input type="date" onChange={(e) => updateDate(d.id, e.target.value)} />
                                     </div>
                                   </div>
                                 </th>
                               );
                             })}
                             
-                            {/* UUS JA OHUTU: "Lisa päev" nupp */}
                             {!isEditMode && (
-                              <th rowSpan={2} className="border-b border-r border-slate-200 p-3 bg-slate-50 align-middle min-w-[150px] shadow-[inset_1px_0_0_0_#e2e8f0]">
-                                <button onClick={handleQuickAddDate} className="flex flex-col items-center justify-center gap-1 w-full px-3 py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors font-medium border border-emerald-300 shadow-sm">
-                                  <span className="flex items-center gap-1"><Icon name="Plus" size={16} /> Lisa päev</span>
-                                </button>
-                                <p className="text-[10px] text-slate-500 font-normal mt-2 leading-tight text-center">
-                                  Lisab uue veeru ja<br/>kopeerib eelmised ajad
-                                </p>
+                              <th rowSpan={2} className="border-b border-r border-slate-200 p-3 bg-emerald-50 align-middle min-w-[140px] shadow-[inset_1px_0_0_0_#e2e8f0]">
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                  <div className="relative flex items-center justify-center gap-2 w-full px-3 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-bold shadow-md cursor-pointer overflow-hidden">
+                                    <Icon name="Plus" size={18} strokeWidth={3} />
+                                    <span>Lisa päev</span>
+                                    <input type="date" onChange={handleQuickAddDate} title="Vali kalendrist kuupäev" />
+                                  </div>
+                                  <p className="text-[10px] text-emerald-800 font-medium leading-tight text-center">Kopeerib eelmise päeva kellaajad</p>
+                                </div>
                               </th>
                             )}
                           </tr>
                           <tr>
                             <th className="sticky left-0 z-20 bg-slate-50 border-b border-r border-slate-200 p-3 text-left font-bold text-slate-700 shadow-[1px_0_0_0_#e2e8f0]">Osaleja Nimi</th>
-                            
-                            {/* KELLAAEGAE PÄIS (Nähtav muutmisnupp) */}
                             {dates.map((d, i) => {
                               if (d.times.length === 0) return null;
                               return d.times.map(t => (
                                 <th key={`${d.id}_${t}`} className={`border-b border-r border-slate-200/50 p-2 text-center font-semibold ${THEMES[i % THEMES.length].subHeader} min-w-[90px]`}>
-                                  <div className="flex items-center justify-center gap-1">
+                                  <div className="flex flex-col items-center justify-center gap-1">
                                     <span>{t}</span>
-                                    <div className="relative flex items-center justify-center w-5 h-5 bg-black/5 hover:bg-black/15 rounded transition-colors cursor-pointer" title="Muuda kellaaega">
+                                    <div className="relative flex items-center justify-center w-6 h-6 bg-black/5 hover:bg-black/15 rounded-md transition-colors cursor-pointer" title="Muuda kellaaega">
                                       <Icon name="Edit" size={12} className="text-slate-600" />
-                                      <input type="time" value={t} onChange={(e) => updateTime(d.id, t, e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                      <input type="time" value={t} onChange={(e) => updateTime(d.id, t, e.target.value)} />
                                     </div>
                                   </div>
                                 </th>
@@ -574,14 +420,12 @@
                                   const isSelected = selections[selKey];
                                   return (
                                     <td key={selKey} onClick={() => toggleSelection(name, d.label, t)} className={`border-b border-r border-slate-200 p-0 cursor-pointer transition-all duration-150 ${isSelected ? theme.cellSelected : `bg-transparent ${theme.cellHover}`}`}>
-                                      <div className="flex items-center justify-center h-12 w-full">
-                                        {isSelected && <Icon name="Check" size={24} strokeWidth={3} />}
-                                      </div>
+                                      <div className="flex items-center justify-center h-12 w-full">{isSelected && <Icon name="Check" size={24} strokeWidth={3} />}</div>
                                     </td>
                                   );
                                 });
                               })}
-                              {!isEditMode && <td className="border-b border-r border-slate-200 bg-slate-50/20"></td>}
+                              {!isEditMode && <td className="border-b border-r border-slate-200 bg-emerald-50/10"></td>}
                             </tr>
                           ))}
                         </tbody>
@@ -593,18 +437,12 @@
                                 if (d.times.length === 0) return null;
                                 const theme = THEMES[i % THEMES.length];
                                 return d.times.map(t => {
-                                  const key = `${d.label}@@${t}`;
-                                  const total = totals[key] || 0;
+                                  const total = totals[`${d.label}@@${t}`] || 0;
                                   const isBestTime = total > 0 && total === maxTotal;
-                                  return (
-                                    <td key={key} className={`border-t-4 border-r border-slate-300 p-3 text-center font-bold text-lg transition-colors ${isBestTime ? theme.bestTime : 'text-slate-600'}`}>
-                                      {total}
-                                      {isBestTime && <div className="text-[10px] font-normal uppercase tracking-wider opacity-90 mt-1">Parim aeg</div>}
-                                    </td>
-                                  );
+                                  return <td key={`${d.label}@@${t}`} className={`border-t-4 border-r border-slate-300 p-3 text-center font-bold text-lg transition-colors ${isBestTime ? theme.bestTime : 'text-slate-600'}`}>{total}{isBestTime && <div className="text-[10px] font-normal uppercase tracking-wider opacity-90 mt-1">Parim aeg</div>}</td>;
                                 });
                               })}
-                              {!isEditMode && <td className="border-t-4 border-slate-300 bg-slate-50"></td>}
+                              {!isEditMode && <td className="border-t-4 border-slate-300 bg-emerald-50/20"></td>}
                             </tr>
                           </tfoot>
                         )}
