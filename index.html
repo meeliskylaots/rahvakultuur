@@ -215,29 +215,6 @@
             setDates(newDates); setSelections(newSelections); saveToFirebase(names, newDates, newSelections);
           };
 
-          // --- KIIRE LISAMINE ESILEHEL ---
-          const handleQuickAddDate = (e) => {
-            const dateVal = e.target.value;
-            if (!dateVal) return;
-            
-            const formattedLabel = formatEstonianDate(dateVal);
-            if (dates.some(d => d.label === formattedLabel)) {
-                alert("See kuupäev on juba tabelis!");
-                e.target.value = '';
-                return;
-            }
-
-            let timesToCopy = [];
-            const lastValidDate = [...dates].reverse().find(d => d.times && d.times.length > 0);
-            if (lastValidDate) { timesToCopy = [...lastValidDate.times]; } 
-            else { timesToCopy = ['14:00', '15:00', '16:00', '17:00']; }
-
-            const newDates = [...dates, { id: `d${Date.now()}`, label: formattedLabel, times: timesToCopy }];
-            setDates(newDates);
-            saveToFirebase(names, newDates, selections);
-            e.target.value = ''; // Puhastame, et saaks uuesti valida
-          };
-
           // --- SEADETE ALL OLEVAD FUNKTSIOONID ---
           const addName = () => { 
             const trimmed = newName.trim();
@@ -355,7 +332,7 @@
                     {dates.length === 0 ? (
                       <div className="p-12 text-center text-slate-500">
                         <Icon name="CalendarDays" size={48} className="mx-auto mb-4 opacity-20" />
-                        <p>Tabel on tühi. Vali kalendrist esimene päev, et alustada.</p>
+                        <p>Tabel on tühi. Mine "Muuda andmeid" alla, et lisada esimene päev.</p>
                       </div>
                     ) : (
                       <table className="min-w-full border-collapse text-sm">
@@ -376,19 +353,6 @@
                                 </th>
                               );
                             })}
-                            
-                            {!isEditMode && (
-                              <th rowSpan={2} className="border-b border-r border-slate-200 p-3 bg-emerald-50 align-middle min-w-[140px] shadow-[inset_1px_0_0_0_#e2e8f0]">
-                                <div className="flex flex-col items-center justify-center gap-2">
-                                  <div className="relative flex items-center justify-center gap-2 w-full px-3 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-bold shadow-md cursor-pointer overflow-hidden">
-                                    <Icon name="Plus" size={18} strokeWidth={3} />
-                                    <span>Lisa päev</span>
-                                    <input type="date" onChange={handleQuickAddDate} title="Vali kalendrist kuupäev" />
-                                  </div>
-                                  <p className="text-[10px] text-emerald-800 font-medium leading-tight text-center">Kopeerib eelmise päeva kellaajad</p>
-                                </div>
-                              </th>
-                            )}
                           </tr>
                           <tr>
                             <th className="sticky left-0 z-20 bg-slate-50 border-b border-r border-slate-200 p-3 text-left font-bold text-slate-700 shadow-[1px_0_0_0_#e2e8f0]">Osaleja Nimi</th>
@@ -425,7 +389,6 @@
                                   );
                                 });
                               })}
-                              {!isEditMode && <td className="border-b border-r border-slate-200 bg-emerald-50/10"></td>}
                             </tr>
                           ))}
                         </tbody>
@@ -442,7 +405,6 @@
                                   return <td key={`${d.label}@@${t}`} className={`border-t-4 border-r border-slate-300 p-3 text-center font-bold text-lg transition-colors ${isBestTime ? theme.bestTime : 'text-slate-600'}`}>{total}{isBestTime && <div className="text-[10px] font-normal uppercase tracking-wider opacity-90 mt-1">Parim aeg</div>}</td>;
                                 });
                               })}
-                              {!isEditMode && <td className="border-t-4 border-slate-300 bg-emerald-50/20"></td>}
                             </tr>
                           </tfoot>
                         )}
