@@ -14,6 +14,9 @@
     <style>
         /* Lihtne laadimisekraan alglaadimiseks */
         #loader { display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #475569; }
+        /* Peidame kellaikooni osades brauserites, et disain oleks puhtam */
+        input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -59,7 +62,7 @@
                 Plus: <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>,
                 Trash2: <><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></>,
                 X: <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>,
-                Download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>
+                Edit: <><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></>
             };
             return (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -67,6 +70,17 @@
                 </svg>
             );
         }
+
+        // Abifunktsioon kuupäeva ilusamaks vormindamiseks
+        const formatEstonianDate = (dateString) => {
+            if (!dateString) return "";
+            const d = new Date(dateString);
+            const days = ['Pühapäev', 'Esmaspäev', 'Teisipäev', 'Kolmapäev', 'Neljapäev', 'Reede', 'Laupäev'];
+            const dayName = days[d.getDay()];
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            return `${day}.${month} (${dayName})`;
+        };
 
         function App() {
           const [user, setUser] = useState(null);
@@ -196,8 +210,10 @@
           };
           
           const addDate = () => { 
-            if (newDate.trim()) { 
-                const newDates = [...dates, { id: `d${Date.now()}`, label: newDate.trim(), times: [] }];
+            if (newDate) { 
+                // Vormindame kalendrist tulnud kuupäeva ilusamaks
+                const formattedLabel = formatEstonianDate(newDate);
+                const newDates = [...dates, { id: `d${Date.now()}`, label: formattedLabel, times: [] }];
                 setDates(newDates); 
                 saveToFirebase(names, newDates, selections);
                 setNewDate(""); 
@@ -211,10 +227,13 @@
           };
           
           const addTime = (dateId) => {
-            const timeToAdd = newTimes[dateId]?.trim();
+            const timeToAdd = newTimes[dateId];
             if (timeToAdd) {
               const newDates = dates.map(d => {
-                if (d.id === dateId && !d.times.includes(timeToAdd)) { return { ...d, times: [...d.times, timeToAdd] }; }
+                if (d.id === dateId && !d.times.includes(timeToAdd)) { 
+                  // Lisame aja ja sorteerime massiivi, et ajad oleksid alati õiges järjekorras!
+                  return { ...d, times: [...d.times, timeToAdd].sort() }; 
+                }
                 return d;
               });
               setDates(newDates);
@@ -230,6 +249,66 @@
             });
             setDates(newDates);
             saveToFirebase(names, newDates, selections);
+          };
+
+          const updateDate = (dateId, newDateStr) => {
+            if (!newDateStr) return;
+            const formattedLabel = formatEstonianDate(newDateStr);
+            let oldLabel = "";
+            const newDates = dates.map(d => {
+              if (d.id === dateId) {
+                oldLabel = d.label;
+                return { ...d, label: formattedLabel };
+              }
+              return d;
+            });
+
+            // Tõstame varasemad linnukesed uue kuupäeva alla
+            const newSelections = { ...selections };
+            if (oldLabel && oldLabel !== formattedLabel) {
+              Object.keys(newSelections).forEach(key => {
+                const [name, dLabel, time] = key.split("@@");
+                if (dLabel === oldLabel) {
+                  const val = newSelections[key];
+                  delete newSelections[key];
+                  newSelections[`${name}@@${formattedLabel}@@${time}`] = val;
+                }
+              });
+            }
+            setDates(newDates);
+            setSelections(newSelections);
+            saveToFirebase(names, newDates, newSelections);
+          };
+
+          const updateTime = (dateId, oldTime, newTimeStr) => {
+            if (!newTimeStr || oldTime === newTimeStr) return;
+            let dateLabel = "";
+            const newDates = dates.map(d => {
+              if (d.id === dateId) {
+                dateLabel = d.label;
+                let updatedTimes = d.times.filter(t => t !== oldTime);
+                if (!updatedTimes.includes(newTimeStr)) updatedTimes.push(newTimeStr);
+                updatedTimes.sort();
+                return { ...d, times: updatedTimes };
+              }
+              return d;
+            });
+
+            // Tõstame varasemad linnukesed uue kellaaja alla
+            const newSelections = { ...selections };
+            if (dateLabel) {
+              Object.keys(newSelections).forEach(key => {
+                const [name, dLabel, time] = key.split("@@");
+                if (dLabel === dateLabel && time === oldTime) {
+                  const val = newSelections[key];
+                  delete newSelections[key];
+                  newSelections[`${name}@@${dateLabel}@@${newTimeStr}`] = val;
+                }
+              });
+            }
+            setDates(newDates);
+            setSelections(newSelections);
+            saveToFirebase(names, newDates, newSelections);
           };
 
           // --- ARVUTUSED ---
@@ -386,7 +465,13 @@
                       <div className="space-y-4">
                         <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Icon name="CalendarDays" size={18} /> Kuupäevad ja ajad</h3>
                         <div className="flex gap-2">
-                          <input type="text" value={newDate} onChange={(e) => setNewDate(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addDate()} placeholder="Uus kuupäev (nt 15.03 Reede)" className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400" />
+                          <input 
+                            type="date" 
+                            value={newDate} 
+                            onChange={(e) => setNewDate(e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && addDate()} 
+                            className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400" 
+                          />
                           <button onClick={addDate} className="bg-slate-800 text-white p-2 rounded-lg hover:bg-slate-700"><Icon name="Plus" size={20} /></button>
                         </div>
                         <div className="space-y-3">
@@ -396,21 +481,35 @@
                             return (
                               <div key={d.id} className={`border rounded-lg overflow-hidden`}>
                                 <div className={`flex justify-between items-center p-3 ${theme.header}`}>
-                                  <span className="font-semibold">{d.label}</span>
+                                  <div className="relative flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" title="Muuda kuupäeva">
+                                    <input type="date" onChange={(e) => updateDate(d.id, e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                    <span className="font-semibold">{d.label}</span>
+                                    <Icon name="Edit" size={16} className="opacity-60" />
+                                  </div>
                                   <button onClick={() => removeDate(d.id)} className="text-slate-700 hover:text-rose-600 hover:bg-white/50 p-1 rounded"><Icon name="Trash2" size={18} /></button>
                                 </div>
                                 <div className="p-3 bg-white space-y-2">
                                   <div className="flex flex-wrap gap-2">
                                     {d.times.map(t => (
                                       <div key={t} className={`flex items-center gap-1 text-sm border px-2 py-1 rounded-md ${theme.subHeader}`}>
-                                        <span>{t}</span>
+                                        <div className="relative flex items-center gap-1 cursor-pointer hover:opacity-80" title="Muuda kellaaega">
+                                          <input type="time" value={t} onChange={(e) => updateTime(d.id, t, e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                          <span>{t}</span>
+                                          <Icon name="Edit" size={14} className="opacity-50" />
+                                        </div>
                                         <button onClick={() => removeTime(d.id, t)} className="text-slate-500 hover:text-rose-500 ml-1"><Icon name="X" size={14} /></button>
                                       </div>
                                     ))}
                                     {d.times.length === 0 && <span className="text-xs text-slate-400 italic">Kellaaegu pole</span>}
                                   </div>
                                   <div className="flex gap-2 mt-2 pt-2 border-t border-slate-100">
-                                    <input type="text" value={newTimes[d.id] || ""} onChange={(e) => setNewTimes({...newTimes, [d.id]: e.target.value})} onKeyDown={(e) => e.key === 'Enter' && addTime(d.id)} placeholder="Uus aeg (nt 18:30)" className="text-sm flex-1 px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-400" />
+                                    <input 
+                                      type="time" 
+                                      value={newTimes[d.id] || ""} 
+                                      onChange={(e) => setNewTimes({...newTimes, [d.id]: e.target.value})} 
+                                      onKeyDown={(e) => e.key === 'Enter' && addTime(d.id)} 
+                                      className="text-sm flex-1 px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-400" 
+                                    />
                                     <button onClick={() => addTime(d.id)} className="bg-slate-200 text-slate-700 px-2 rounded hover:bg-slate-300 text-sm font-medium">Lisa</button>
                                   </div>
                                 </div>
